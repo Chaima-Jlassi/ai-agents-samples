@@ -1,0 +1,44 @@
+name: 'Setup Terraform'
+description: 'Install a pinned Terraform CLI version without a third-party GitHub action'
+
+inputs:
+  terraform_version:
+    description: 'Terraform CLI version to install'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install Terraform
+      shell: bash
+      env:
+        TERRAFORM_VERSION: ${{ inputs.terraform_version }}
+      run: |
+        set -euo pipefail
+
+        case "$(uname -m)" in
+          x86_64) terraform_arch="amd64" ;;
+          aarch64|arm64) terraform_arch="arm64" ;;
+          *) echo "Unsupported runner architecture: $(uname -m)" >&2; exit 1 ;;
+        esac
+
+        terraform_archive="terraform_${TERRAFORM_VERSION}_linux_${terraform_arch}.zip"
+        terraform_url="https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}"
+        install_dir="${RUNNER_TEMP}/terraform-${TERRAFORM_VERSION}"
+
+        mkdir -p "${install_dir}"
+        curl --fail --silent --show-error --location \
+          "${terraform_url}/${terraform_archive}" \
+          --output "${install_dir}/${terraform_archive}"
+        curl --fail --silent --show-error --location \
+          "${terraform_url}/terraform_${TERRAFORM_VERSION}_SHA256SUMS" \
+          --output "${install_dir}/SHA256SUMS"
+
+        (
+          cd "${install_dir}"
+          grep " ${terraform_archive}$" SHA256SUMS | sha256sum --check --strict -
+          unzip -o "${terraform_archive}"
+        )
+
+        echo "${install_dir}" >> "${GITHUB_PATH}"
+        "${install_dir}/terraform" version
